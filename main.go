@@ -92,6 +92,12 @@ func main() {
 
 			h, s, v := rgbToHSV(r8,g8,b8)
 
+			h = math.Ceil(h)
+			s = math.Ceil(s)
+			v = math.Ceil(v)
+//create an array of sets in the format "H|S|V" and a count. Maybe use a map[string]int to store the counts.
+
+			fmt.Println("HSV: ", h,s,v)
 			pixels = append(pixels, Pixel{
 				R: r8,
 				G: g8,
