@@ -17,6 +17,12 @@ type Pixel struct {
 	H, S, V float64
 }
 
+type PixelMap struct {
+	H,S,V float64
+	Count int
+}
+
+
 func rgbToHSV(r,g,b uint8) (float64, float64, float64) {
 	rf := float64(r) / 255.0
 	gf := float64(g) / 255.0
@@ -63,6 +69,8 @@ func main() {
 		return
 	}
 
+	pixelMap := make(map[string]PixelMap)
+
 	fileName := os.Args[1]
 
 	file, err := os.Open(fileName)
@@ -93,11 +101,17 @@ func main() {
 			h, s, v := rgbToHSV(r8,g8,b8)
 
 			h = math.Ceil(h)
-			s = math.Ceil(s)
-			v = math.Ceil(v)
+			s = math.Round(s*100)/100
+			v = math.Round(v*100)/100
 //create an array of sets in the format "H|S|V" and a count. Maybe use a map[string]int to store the counts.
 
-			fmt.Println("HSV: ", h,s,v)
+			key := fmt.Sprintf("%.0f|%.2f|%.2f ", h,s,v)
+			if pm, ok := pixelMap[key]; ok {
+				pm.Count++
+				pixelMap[key] = pm
+			}else{
+				pixelMap[key] = PixelMap{H: h, S:s, V:v, Count:1}
+			}
 			pixels = append(pixels, Pixel{
 				R: r8,
 				G: g8,
@@ -108,7 +122,9 @@ func main() {
 			})
 		}
 	}
-
+	for key, pm := range pixelMap {
+    fmt.Printf("%s: %d\n", key, pm.Count)
+}
 	fmt.Println("Total pixels:", len(pixels))
 
 	sort.Slice(pixels, func(i,j int) bool {
