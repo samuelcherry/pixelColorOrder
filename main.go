@@ -3,25 +3,18 @@ package main
 import (
 	"fmt"
 	"image"
-	"image/color"
 	_ "image/jpeg"
-	"image/png"
 	_ "image/png"
 	"math"
 	"os"
-	"sort"
+	"time"
 )
 
-type Pixel struct {
-	R, G, B uint8
-	H, S, V float64
-}
 
 type PixelMap struct {
 	H,S,V float64
 	Count int
 }
-
 
 func rgbToHSV(r,g,b uint8) (float64, float64, float64) {
 	rf := float64(r) / 255.0
@@ -62,33 +55,27 @@ func rgbToHSV(r,g,b uint8) (float64, float64, float64) {
 	return h,s,v
 }
 
-func main() {
-
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run main.go <image>")
-		return
-	}
-
-	pixelMap := make(map[string]PixelMap)
-
-	fileName := os.Args[1]
-
+func importImage(fileName string) (image.Image, error) {
 	file, err := os.Open(fileName)
 	if err != nil {
 		fmt.Println("Error opening file:", err)
-		return
+		return nil, err
 	}
 	defer file.Close()
 
 	img, _, err := image.Decode(file)
 	if err != nil {
 		fmt.Println("Error decoding image:", err)
-		return
+		return nil, err
 	} 
 
-	bounds := img.Bounds()
+		return img, nil
+}
 
-	var pixels []Pixel
+func createHashMap(img image.Image) map[string]PixelMap {
+	
+	bounds := img.Bounds()
+	pixelMap := make(map[string]PixelMap)
 
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
@@ -103,7 +90,6 @@ func main() {
 			h = math.Ceil(h)
 			s = math.Round(s*100)/100
 			v = math.Round(v*100)/100
-//create an array of sets in the format "H|S|V" and a count. Maybe use a map[string]int to store the counts.
 
 			key := fmt.Sprintf("%.0f|%.2f|%.2f ", h,s,v)
 			if pm, ok := pixelMap[key]; ok {
@@ -112,72 +98,52 @@ func main() {
 			}else{
 				pixelMap[key] = PixelMap{H: h, S:s, V:v, Count:1}
 			}
-			pixels = append(pixels, Pixel{
-				R: r8,
-				G: g8,
-				B: b8,
-				H: h,
-				S: s,
-				V: v,
-			})
 		}
 	}
-	for key, pm := range pixelMap {
-    fmt.Printf("%s: %d\n", key, pm.Count)
+
+	return pixelMap
 }
-	fmt.Println("Total pixels:", len(pixels))
 
-	sort.Slice(pixels, func(i,j int) bool {
 
-		if pixels[i].V < 0.05 && pixels[j].V >= 0.05 {
-			return true
-		}
-		if pixels[j].V < 0.05 && pixels[i].V >= 0.05 {
-			return false
-		}
-
-		if pixels[i].S < 0.1 && pixels[j].S >= 0.1 {
-			return true
-		}
-		if pixels[j].S < 0.1 && pixels[i].S >= 0.1 {
-			return false
-		}
-
-		if pixels[i].H != pixels[j].H{
-			return pixels[i].H < pixels[j].H
-		}
-
-		if pixels[i].S != pixels[j].S{
-			return pixels[i].S < pixels[j].S
-		}
-
-		return pixels[i].V < pixels[j].V
-	})
-
-	outImg := image.NewRGBA(bounds)
-
-	i := 0
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			p:= pixels[i]
-
-			outImg.Set(x,y, color.RGBA{
-				R: p.R,
-				G: p.G,
-				B: p.B,
-				A: 255,
-			})
-			i++
-		}
-	}
-
-	outFile, err := os.Create("output.png")
+func writeToFile(pixelMap map[string]PixelMap, outputFile string) error {
+	file, err := os.Create("output.txt")
 	if err != nil {
 		fmt.Println("Error creating file:", err)
+		return err
+	}
+	defer file.Close()
+
+	for key, value := range pixelMap {
+		line := fmt.Sprintf("%s: %+v\n", key, value)
+		_, err := file.WriteString(line)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: go run main.go <image>")
 		return
 	}
-	defer outFile.Close()
 
-	png.Encode(outFile, outImg)
-	fmt.Println("Saved output.png")
+	fileName := os.Args[1]
+
+	img, err := importImage(fileName)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	start := time.Now()
+	pixelMap := createHashMap(img)
+	fmt.Println("Processing took:", time.Since(start))
+
+
+	err = writeToFile(pixelMap, "output.txt")
+	if err != nil {
+		fmt.Println("Error writing file:", err)
+	}
 }
