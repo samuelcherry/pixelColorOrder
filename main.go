@@ -52,25 +52,23 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 }
 
 
-func importImage(fileName string) (image.Image, error) {
+func importImage(fileName string) (*os.File, error) {
 	file, err := os.Open(fileName)
-
 	if err != nil {
-		fmt.Println("Error opening file:", err)
-		return nil, err
+		return nil, fmt.Errorf("Error opening file:", err)
 	}
-	defer file.Close()
-
-	img, _, err := image.Decode(file)
-
-	if err != nil {
-		fmt.Println("Error decoding image:", err)
-		return nil, err
-	} 
-
-		return img, nil
+	return file, nil
 }
 
+func decodeImage(file *os.File)(image.Image, error){
+	defer file.Close()
+	
+	img, _, err := image.Decode(file)
+	if err != nil {
+		return nil, fmt.Errorf("Error decoding image:", err)
+	} 
+	return img, nil
+}
 func roundTo25(value float64) float64 {
 	return math.Round(value/25)*25
 }
