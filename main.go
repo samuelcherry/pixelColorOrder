@@ -1,19 +1,58 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
 	"math"
+	"net/http"
 	"os"
-	"time"
 )
 
 
 type PixelMap struct {
-	H,S,V float64
-	Count int
+	R,G,B float64 `json:"h"`
+	Count int	  `json:"count"`
+}
+
+func CORSmiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func handleImage(w http.ResponseWriter, r *http.Request) {
+	filename := r.URL.Query().Get("image")
+	
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	
+	if filename == "" {
+		http.Error(w, "Image parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	img, err := importImage(filename)
+	if err != nil {
+		http.Error(w, err.Error(),500)
+		return
+	}
+
+	pixelMap := createHashMap(img)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(pixelMap)
 }
 
 func rgbToHSV(r,g,b uint8) (float64, float64, float64) {
@@ -72,6 +111,10 @@ func importImage(fileName string) (image.Image, error) {
 		return img, nil
 }
 
+func roundTo25(value float64) float64 {
+	return math.Round(value/25)*25
+}
+
 func createHashMap(img image.Image) map[string]PixelMap {
 	
 	bounds := img.Bounds()
@@ -81,69 +124,53 @@ func createHashMap(img image.Image) map[string]PixelMap {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
 			r, g, b, _:= img.At(x, y).RGBA()
 
-			r8 := uint8(r >> 8)
-			g8 := uint8(g >> 8)
-			b8 := uint8(b >> 8)
+			r8 := roundTo25(float64(r >> 8))
+			g8 := roundTo25(float64(g >> 8))
+			b8 := roundTo25(float64(b >> 8))
 
-			h, s, v := rgbToHSV(r8,g8,b8)
 
-			h = math.Ceil(h)
-			s = math.Round(s*100)/100
-			v = math.Round(v*100)/100
-
-			key := fmt.Sprintf("%.0f|%.2f|%.2f ", h,s,v)
+			key := fmt.Sprintf("%.0f|%.2f|%.2f ", r8,g8,b8)
 			if pm, ok := pixelMap[key]; ok {
 				pm.Count++
 				pixelMap[key] = pm
 			}else{
-				pixelMap[key] = PixelMap{H: h, S:s, V:v, Count:1}
+				pixelMap[key] = PixelMap{R: r8, G:g8, B:b8, Count:1}
 			}
 		}
 	}
-
 	return pixelMap
 }
 
 
-func writeToFile(pixelMap map[string]PixelMap, outputFile string) error {
-	file, err := os.Create("output.txt")
-	if err != nil {
-		fmt.Println("Error creating file:", err)
-		return err
+func handleProcess(w http.ResponseWriter, r *http.Request) {
+	filename := r.URL.Query().Get("image")
+	if filename == "" {
+		http.Error(w, "Image parameter is required", http.StatusBadRequest)
+		return
 	}
-	defer file.Close()
 
-	for key, value := range pixelMap {
-		line := fmt.Sprintf("%s: %+v\n", key, value)
-		_, err := file.WriteString(line)
-		if err != nil {
-			return err
-		}
+	img, err := importImage(filename)
+	if err != nil {
+		http.Error(w, err.Error(),500)
+		return
 	}
-	return nil
+
+	pixelMap := createHashMap(img)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(pixelMap)
+
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run main.go <image>")
-		return
-	}
 
-	fileName := os.Args[1]
+	mux := http.NewServeMux()
+	mux.HandleFunc("/process", handleProcess)
+	
+	handler :=CORSmiddleware(mux)
 
-	img, err := importImage(fileName)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-
-	start := time.Now()
-	pixelMap := createHashMap(img)
-	fmt.Println("Processing took:", time.Since(start))
+	fmt.Println("Server running on http://localhost:8080")
+	http.ListenAndServe(":8080", handler)
 
 
-	err = writeToFile(pixelMap, "output.txt")
-	if err != nil {
-		fmt.Println("Error writing file:", err)
-	}
 }
