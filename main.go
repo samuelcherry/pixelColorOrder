@@ -34,10 +34,6 @@ func CORSmiddleware(next http.Handler) http.Handler {
 func handleImage(w http.ResponseWriter, r *http.Request) {
 	filename := r.URL.Query().Get("image")
 	
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	
 	if filename == "" {
 		http.Error(w, "Image parameter is required", http.StatusBadRequest)
 		return
@@ -55,47 +51,10 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(pixelMap)
 }
 
-func rgbToHSV(r,g,b uint8) (float64, float64, float64) {
-	rf := float64(r) / 255.0
-	gf := float64(g) / 255.0
-	bf := float64(b) /255.0
-
-	max := math.Max(rf, math.Max(gf, bf))
-	min := math.Min(rf, math.Min(gf, bf))
-	delta := max - min
-
-
-	var h float64
-	switch {
-	case delta == 0:
-		h = 0
-	case max == rf:
-		h = math.Mod((gf-bf)/delta, 6)
-	case max == gf:
-		h = (bf-rf)/delta + 2
-	case max == bf:
-		h = (rf-gf)/delta + 4
-	}
-
-	h *= 60
-	if h < 0 {
-		h+= 360
-	}
-
-	var s float64
-	if max == 0 {
-		s = 0
-	}else {
-		s = delta/max
-	}
-
-	v := max
-
-	return h,s,v
-}
 
 func importImage(fileName string) (image.Image, error) {
 	file, err := os.Open(fileName)
+
 	if err != nil {
 		fmt.Println("Error opening file:", err)
 		return nil, err
@@ -103,6 +62,7 @@ func importImage(fileName string) (image.Image, error) {
 	defer file.Close()
 
 	img, _, err := image.Decode(file)
+
 	if err != nil {
 		fmt.Println("Error decoding image:", err)
 		return nil, err
@@ -128,8 +88,7 @@ func createHashMap(img image.Image) map[string]PixelMap {
 			g8 := roundTo25(float64(g >> 8))
 			b8 := roundTo25(float64(b >> 8))
 
-
-			key := fmt.Sprintf("%.0f|%.2f|%.2f ", r8,g8,b8)
+			key := fmt.Sprintf("%.0f|%.0f|%.0f", r8,g8,b8)
 			if pm, ok := pixelMap[key]; ok {
 				pm.Count++
 				pixelMap[key] = pm
@@ -171,6 +130,5 @@ func main() {
 
 	fmt.Println("Server running on http://localhost:8080")
 	http.ListenAndServe(":8080", handler)
-
 
 }
